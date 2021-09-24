@@ -153,6 +153,8 @@ void setup() {
         Serial.begin(SERIAL_BAUDRATE);
 
     writeToSerial("ESP8266MCU13 Booting...", true);
+		writeToSerial("FW Version: ", false);
+		writeToSerial(AUTO_VERSION, true);
 
     // WIFI
 
