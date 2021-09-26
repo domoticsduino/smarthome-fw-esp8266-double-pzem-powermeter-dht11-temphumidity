@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncElegantOTA.h>
 
 #include "../include/config.h"
 
@@ -37,206 +40,227 @@ int countSampleTempHum;
 
 //JSON
 DynamicJsonBuffer jsonBuffer;
-JsonObject& configRoot = jsonBuffer.createObject();
-JsonObject& tempHum = jsonBuffer.createObject();
-JsonObject& power = jsonBuffer.createObject();
+JsonObject &jsonRoot = jsonBuffer.createObject();
+JsonObject &configRoot = jsonRoot.createNestedObject("config");
+JsonObject &tempHum = jsonRoot.createNestedObject("env");
+JsonObject &powerC = jsonRoot.createNestedObject("powerC");
+JsonObject &powerFV = jsonRoot.createNestedObject("powerFV");
+JsonObject &jsonInfo = jsonRoot.createNestedObject("info");
 
-void createJsonConfig(){
+// WEB SERVER - OTA
+AsyncWebServer server(80);
 
-    configRoot["readInterval"] = READ_INTERVAL;
-    configRoot["maxSamples"] = MAX_SAMPLES;
+void createJsonConfig()
+{
 
+	configRoot["readInterval"] = READ_INTERVAL;
+	configRoot["maxSamples"] = MAX_SAMPLES;
 }
 
-void printDebugPowerData(DDPZEM004TVal values){
+void printDebugPowerData(DDPZEM004TVal values)
+{
 
-    writeToSerial("POWER READ Success = ", false);
-    writeToSerial(values.success ? "True" : "False", true);
-    if(values.success){
+	writeToSerial("POWER READ Success = ", false);
+	writeToSerial(values.success ? "True" : "False", true);
+	if (values.success)
+	{
 
-        writeToSerial("Voltage: ", false);
-        writeToSerial(values.voltage, false);
-        writeToSerial(" V ", true);
-        writeToSerial("Current: ", false);
-        writeToSerial(values.current, false);
-        writeToSerial(" A ", true);
-        writeToSerial("Power: ", false);
-        writeToSerial(values.power, false);
-        writeToSerial(" W ", true);
-        writeToSerial("Energy: ", false);
-        writeToSerial(values.energy, false);
-        writeToSerial(" Wh ", true);
-
-    }
-
+		writeToSerial("Voltage: ", false);
+		writeToSerial(values.voltage, false);
+		writeToSerial(" V ", true);
+		writeToSerial("Current: ", false);
+		writeToSerial(values.current, false);
+		writeToSerial(" A ", true);
+		writeToSerial("Power: ", false);
+		writeToSerial(values.power, false);
+		writeToSerial(" W ", true);
+		writeToSerial("Energy: ", false);
+		writeToSerial(values.energy, false);
+		writeToSerial(" Wh ", true);
+	}
 }
 
-void printDebugTempHum(DDDHTXXVal tempHumValue){
+void printDebugTempHum(DDDHTXXVal tempHumValue)
+{
 
-    writeToSerial("TEMP Success = ", false);
-    writeToSerial(tempHumValue.success ? "True" : "False", true);
-    if(!tempHumValue.success)
-        writeToSerial(tempHumValue.errorMsg, true);
-    else{
+	writeToSerial("TEMP Success = ", false);
+	writeToSerial(tempHumValue.success ? "True" : "False", true);
+	if (!tempHumValue.success)
+		writeToSerial(tempHumValue.errorMsg, true);
+	else
+	{
 
-        writeToSerial("Humidity: ", false);
-        writeToSerial(tempHumValue.humidity, false);
-        writeToSerial(" %\t", false);
-        writeToSerial("Temperature: ", false);
-        writeToSerial(tempHumValue.tempC, false);
-        writeToSerial(" *C ", false);
-        writeToSerial(tempHumValue.tempF, false);
-        writeToSerial(" *F\t", false);
-        writeToSerial("Heat index: ", false);
-        writeToSerial(tempHumValue.heatIndexC, false);
-        writeToSerial(" *C ", false);
-        writeToSerial(tempHumValue.heatIndexF, false);
-        writeToSerial(" *F", true);
-
-    }
-
+		writeToSerial("Humidity: ", false);
+		writeToSerial(tempHumValue.humidity, false);
+		writeToSerial(" %\t", false);
+		writeToSerial("Temperature: ", false);
+		writeToSerial(tempHumValue.tempC, false);
+		writeToSerial(" *C ", false);
+		writeToSerial(tempHumValue.tempF, false);
+		writeToSerial(" *F\t", false);
+		writeToSerial("Heat index: ", false);
+		writeToSerial(tempHumValue.heatIndexC, false);
+		writeToSerial(" *C ", false);
+		writeToSerial(tempHumValue.heatIndexF, false);
+		writeToSerial(" *F", true);
+	}
 }
 
-String generateJsonMessageTemp(DDDHTXXVal tempHumValue, int countSampleTempHum){
+String generateJsonMessageTemp(DDDHTXXVal tempHumValue, int countSampleTempHum)
+{
 
-    DDDHTXXVal tempHumValueTot;
+	DDDHTXXVal tempHumValueTot;
 
-    if(countSampleTempHum>0){
-    
-        tempHumValueTot.humidity = tempHumValue.humidity / countSampleTempHum;
-        tempHumValueTot.tempC = tempHumValue.tempC / countSampleTempHum;
-        tempHumValueTot.tempF = tempHumValue.tempF / countSampleTempHum;
-        tempHumValueTot.heatIndexC = tempHumValue.heatIndexC / countSampleTempHum;
-        tempHumValueTot.heatIndexF =  tempHumValue.heatIndexF / countSampleTempHum;
+	if (countSampleTempHum > 0)
+	{
 
-        tempHum["error"] = "";
+		tempHumValueTot.humidity = tempHumValue.humidity / countSampleTempHum;
+		tempHumValueTot.tempC = tempHumValue.tempC / countSampleTempHum;
+		tempHumValueTot.tempF = tempHumValue.tempF / countSampleTempHum;
+		tempHumValueTot.heatIndexC = tempHumValue.heatIndexC / countSampleTempHum;
+		tempHumValueTot.heatIndexF = tempHumValue.heatIndexF / countSampleTempHum;
 
-    }
-    else
-        tempHum["error"] = "No samples";
+		tempHum["error"] = "";
+	}
+	else
+		tempHum["error"] = "No samples";
 
-    tempHum["humidity"] = tempHumValueTot.humidity;
-    tempHum["tempC"] = tempHumValueTot.tempC;
-    tempHum["tempF"] = tempHumValueTot.tempF;
-    tempHum["heatIndexC"] = tempHumValueTot.heatIndexC;
-    tempHum["heatIndexF"] = tempHumValueTot.heatIndexF;
+	tempHum["humidity"] = tempHumValueTot.humidity;
+	tempHum["tempC"] = tempHumValueTot.tempC;
+	tempHum["tempF"] = tempHumValueTot.tempF;
+	tempHum["heatIndexC"] = tempHumValueTot.heatIndexC;
+	tempHum["heatIndexF"] = tempHumValueTot.heatIndexF;
 
-    String json;
-    tempHum.printTo(json);
+	String json;
+	tempHum.printTo(json);
 
-    return json;
-
+	return json;
 }
 
-String generateJsonMessagePower(DDPZEM004TVal values){
-
-    power["voltage"] = values.voltage;
-    power["current"] = values.current;
-    power["power"] = values.power;
-    power["energy"] = values.energy;
-
-    String json;
-    power.printTo(json);
-
-    return json;
-
+String generateJsonMessagePower(DDPZEM004TVal values, JsonObject &power)
+{
+	power["voltage"] = values.voltage;
+	power["current"] = values.current;
+	power["power"] = values.power;
+	power["energy"] = values.energy;
+	String json;
+	power.printTo(json);
+	return json;
 }
 
-void setup() {
-
-    createJsonConfig();
-    
-    pinMode(LEDSTATUSPIN, OUTPUT);
-    digitalWrite(LEDSTATUSPIN, LOW);
-
-    if(SERIAL_ENABLED)
-        Serial.begin(SERIAL_BAUDRATE);
-
-    writeToSerial("ESP8266MCU13 Booting...", true);
-		writeToSerial("FW Version: ", false);
-		writeToSerial(AUTO_VERSION, true);
-
-    // WIFI
-
-    wifi.connect();
-
-    //MQTT
-
-    clientMqtt.reconnectMQTT();
-
-    //PZEM
-    pzemWrapper.init(&pzemSolar, ipSolar);
-    pzemWrapper.init(&pzemBa, ipBa);
-
-    // DHTXX
-    tempSensor.beginSensor();
-    countSampleTempHum = 0;
-
-    currentSample = 0;
-    lastPowerTriggerValueSolar = -999.0;
-    lastPowerTriggerValueBa = -999.0;
-
+String generateJsonMessageRoot()
+{
+	String json;
+	jsonRoot.printTo(json);
+	return json;
 }
 
-void loop() {
-    
-    // Wait a few seconds between measurements.
-    delay(configRoot["readInterval"]);
+void setup()
+{
 
-    clientMqtt.loop();
+	createJsonConfig();
 
-    DDPZEM004TVal valuesSolar = pzemWrapper.getValues(&pzemSolar, ipSolar);
-    printDebugPowerData(valuesSolar);
-    DDPZEM004TVal valuesBa = pzemWrapper.getValues(&pzemBa, ipBa);
-    printDebugPowerData(valuesBa);
+	pinMode(LEDSTATUSPIN, OUTPUT);
+	digitalWrite(LEDSTATUSPIN, LOW);
 
-    // Get TEMP/HUMIDITY Value
-    DDDHTXXVal tempHumValue = tempSensor.getValue();
-    printDebugTempHum(tempHumValue);
+	if (SERIAL_ENABLED)
+		Serial.begin(SERIAL_BAUDRATE);
 
-    currentSample++;
+	writeToSerial(USER_SETTINGS_WIFI_HOSTNAME, false);
+	writeToSerial(" Booting...", true);
+	writeToSerial("FW Version: ", false);
+	writeToSerial(AUTO_VERSION, true);
 
-    if(tempHumValue.success){
+	// WIFI
+	wifi.connect();
 
-        sampleTempHumValues.humidity += tempHumValue.humidity;
-        sampleTempHumValues.tempC += tempHumValue.tempC;
-        sampleTempHumValues.tempF += tempHumValue.tempF;
-        sampleTempHumValues.heatIndexC += tempHumValue.heatIndexC;
-        sampleTempHumValues.heatIndexF += tempHumValue.heatIndexF;
+	//MQTT
+	clientMqtt.reconnectMQTT();
 
-        countSampleTempHum++;
+	//WEB SERVER
+	jsonInfo["name"] = USER_SETTINGS_WIFI_HOSTNAME;
+	jsonInfo["version"] = AUTO_VERSION;
+	server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+		request->send(200, "application/json", generateJsonMessageRoot());
+	});
+	AsyncElegantOTA.begin(&server);
+	server.begin();
+	writeToSerial("Http server started", true);
 
-    }
+	//PZEM
+	pzemWrapper.init(&pzemSolar, ipSolar);
+	pzemWrapper.init(&pzemBa, ipBa);
 
-    writeToSerial("Current Sample ", false);
-    writeToSerial(currentSample, true);
-    writeToSerial("lastPowerTriggerValueSolar ", false);
-    writeToSerial(lastPowerTriggerValueSolar, true);
-    writeToSerial("lastPowerTriggerValueBa ", false);
-    writeToSerial(lastPowerTriggerValueBa, true);
+	// DHTXX
+	tempSensor.beginSensor();
+	countSampleTempHum = 0;
 
-    if(currentSample >= MAX_SAMPLES){
+	currentSample = 0;
+	lastPowerTriggerValueSolar = -999.0;
+	lastPowerTriggerValueBa = -999.0;
+}
 
-        clientMqtt.sendMessage(TOPIC_DHT11_P, generateJsonMessageTemp(sampleTempHumValues, countSampleTempHum));
+void loop()
+{
 
-        currentSample = 0;
+	AsyncElegantOTA.loop();
 
-    }
+	// Wait a few seconds between measurements.
+	delay(configRoot["readInterval"]);
 
-    if(abs(lastPowerTriggerValueSolar - valuesSolar.power) >= DIFF_POWER_TRIGGER || (lastPowerTriggerValueSolar != valuesSolar.power && valuesSolar.power == 0)){
+	clientMqtt.loop();
 
-        clientMqtt.sendMessage(TOPIC_PZEM1_P, generateJsonMessagePower(valuesSolar));
+	DDPZEM004TVal valuesSolar = pzemWrapper.getValues(&pzemSolar, ipSolar);
+	printDebugPowerData(valuesSolar);
+	DDPZEM004TVal valuesBa = pzemWrapper.getValues(&pzemBa, ipBa);
+	printDebugPowerData(valuesBa);
 
-        lastPowerTriggerValueSolar = valuesSolar.power;
+	// Get TEMP/HUMIDITY Value
+	DDDHTXXVal tempHumValue = tempSensor.getValue();
+	printDebugTempHum(tempHumValue);
 
-    }
+	currentSample++;
 
-    if(abs(lastPowerTriggerValueBa - valuesBa.power) >= DIFF_POWER_TRIGGER || (lastPowerTriggerValueBa != valuesBa.power && valuesBa.power == 0)){
+	if (tempHumValue.success)
+	{
 
-        clientMqtt.sendMessage(TOPIC_PZEM2_P, generateJsonMessagePower(valuesBa));
+		sampleTempHumValues.humidity += tempHumValue.humidity;
+		sampleTempHumValues.tempC += tempHumValue.tempC;
+		sampleTempHumValues.tempF += tempHumValue.tempF;
+		sampleTempHumValues.heatIndexC += tempHumValue.heatIndexC;
+		sampleTempHumValues.heatIndexF += tempHumValue.heatIndexF;
 
-        lastPowerTriggerValueBa = valuesBa.power;
+		countSampleTempHum++;
+	}
 
-    }
+	writeToSerial("Current Sample ", false);
+	writeToSerial(currentSample, true);
+	writeToSerial("lastPowerTriggerValueSolar ", false);
+	writeToSerial(lastPowerTriggerValueSolar, true);
+	writeToSerial("lastPowerTriggerValueBa ", false);
+	writeToSerial(lastPowerTriggerValueBa, true);
 
+	if (currentSample >= MAX_SAMPLES)
+	{
+
+		clientMqtt.sendMessage(TOPIC_DHT11_P, generateJsonMessageTemp(sampleTempHumValues, countSampleTempHum));
+
+		currentSample = 0;
+	}
+
+	if (abs(lastPowerTriggerValueSolar - valuesSolar.power) >= DIFF_POWER_TRIGGER || (lastPowerTriggerValueSolar != valuesSolar.power && valuesSolar.power == 0))
+	{
+
+		clientMqtt.sendMessage(TOPIC_PZEM1_P, generateJsonMessagePower(valuesSolar, powerFV));
+
+		lastPowerTriggerValueSolar = valuesSolar.power;
+	}
+
+	if (abs(lastPowerTriggerValueBa - valuesBa.power) >= DIFF_POWER_TRIGGER || (lastPowerTriggerValueBa != valuesBa.power && valuesBa.power == 0))
+	{
+
+		clientMqtt.sendMessage(TOPIC_PZEM2_P, generateJsonMessagePower(valuesBa, powerC));
+
+		lastPowerTriggerValueBa = valuesBa.power;
+	}
 }
