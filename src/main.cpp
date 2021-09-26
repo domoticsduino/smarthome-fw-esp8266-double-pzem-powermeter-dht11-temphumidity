@@ -114,11 +114,11 @@ String generateJsonMessageTemp(DDDHTXXVal tempHumValue, int countSampleTempHum)
 	if (countSampleTempHum > 0)
 	{
 
-		tempHumValueTot.humidity = tempHumValue.humidity / countSampleTempHum;
-		tempHumValueTot.tempC = tempHumValue.tempC / countSampleTempHum;
-		tempHumValueTot.tempF = tempHumValue.tempF / countSampleTempHum;
-		tempHumValueTot.heatIndexC = tempHumValue.heatIndexC / countSampleTempHum;
-		tempHumValueTot.heatIndexF = tempHumValue.heatIndexF / countSampleTempHum;
+		tempHumValueTot.humidity = round(tempHumValue.humidity / countSampleTempHum);
+		tempHumValueTot.tempC = round(tempHumValue.tempC * 10.0 / countSampleTempHum) / 10.0;
+		tempHumValueTot.tempF = round(tempHumValue.tempF * 10.0 / countSampleTempHum) / 10.0;
+		tempHumValueTot.heatIndexC = round(tempHumValue.heatIndexC * 10.0 / countSampleTempHum) / 10.0;
+		tempHumValueTot.heatIndexF = round(tempHumValue.heatIndexF * 10.0 / countSampleTempHum) / 10.0;
 
 		tempHum["error"] = "";
 	}
